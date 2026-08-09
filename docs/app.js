@@ -1,8 +1,8 @@
 // Состояние приложения
 let currentUser = null;
 let currentTab = 'albums';
-let currentSort = 'date_desc';
 let musicData = { albums: [], singles: [] };
+let currentViewIndex = null; // Индекс элемента для детального просмотра
 
 // Элементы DOM
 const authContainer = document.getElementById('auth-container');
@@ -10,17 +10,22 @@ const appContainer = document.getElementById('app-container');
 const loginForm = document.getElementById('login-form');
 const logoutBtn = document.getElementById('logout-btn');
 const welcomeMsg = document.getElementById('welcome-msg');
-const contentArea = document.getElementById('content-area');
+const contentArea = document.getElementById('items-list');
 const tabBtns = document.querySelectorAll('.tab-btn');
 const sortSelect = document.getElementById('sort-select');
+const addBtn = document.getElementById('add-btn');
 
 // Модальные окна
-const albumModal = document.getElementById('album-modal');
-const singleModal = document.getElementById('single-modal');
+const albumDetailModal = document.getElementById('album-detail-modal');
+const singleDetailModal = document.getElementById('single-detail-modal');
+const albumFormModal = document.getElementById('album-form-modal');
+const singleFormModal = document.getElementById('single-form-modal');
+
+// Формы
 const albumForm = document.getElementById('album-form');
 const singleForm = document.getElementById('single-form');
-const addTrackBtn = document.getElementById('add-track-btn');
 const tracksContainer = document.getElementById('tracks-container');
+const addTrackBtn = document.getElementById('add-track-btn');
 
 // Инициализация
 document.addEventListener('DOMContentLoaded', () => {
@@ -48,13 +53,8 @@ function showApp() {
     appContainer.style.display = 'block';
     welcomeMsg.textContent = `Привет, ${currentUser}!`;
     loadMusicData();
-    
-    // Установка сегодняшней даты по умолчанию
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('album-date').value = today;
-    document.getElementById('single-date').value = today;
-    
-    renderContent();
+    updateControls();
+    renderList();
 }
 
 function setupEventListeners() {
@@ -79,34 +79,37 @@ function setupEventListeners() {
             tabBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             currentTab = btn.dataset.tab;
-            renderContent();
+            updateControls();
+            renderList();
         });
     });
 
-    sortSelect.addEventListener('change', (e) => {
-        currentSort = e.target.value;
-        renderContent();
-    });
+    sortSelect.addEventListener('change', renderList);
+    addBtn.addEventListener('click', () => openFormModal());
 
-    // Album Modal
-    document.querySelectorAll('#album-modal .close').forEach(span => {
-        span.onclick = () => albumModal.style.display = "none";
+    // Закрытие модалок
+    document.querySelectorAll('.close').forEach(span => {
+        span.onclick = function() {
+            this.closest('.modal').style.display = "none";
+        }
     });
-    
-    // Single Modal
-    document.querySelectorAll('#single-modal .close').forEach(span => {
-        span.onclick = () => singleModal.style.display = "none";
-    });
-
     window.onclick = (event) => {
-        if (event.target == albumModal) albumModal.style.display = "none";
-        if (event.target == singleModal) singleModal.style.display = "none";
+        if (event.target.classList.contains('modal')) event.target.style.display = "none";
     };
 
     addTrackBtn.addEventListener('click', () => addTrackField());
-    
     albumForm.addEventListener('submit', saveAlbum);
     singleForm.addEventListener('submit', saveSingle);
+
+    // Кнопки действий в детальном просмотре
+    document.getElementById('edit-album-btn').onclick = () => { closeModals(); openFormModal(currentViewIndex); };
+    document.getElementById('delete-album-btn').onclick = () => deleteItem(currentViewIndex);
+    document.getElementById('edit-single-btn').onclick = () => { closeModals(); openFormModal(currentViewIndex); };
+    document.getElementById('delete-single-btn').onclick = () => deleteItem(currentViewIndex);
+}
+
+function closeModals() {
+    document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
 }
 
 function loadMusicData() {
@@ -122,7 +125,7 @@ function loadMusicData() {
 function saveMusicData() {
     const key = `muzworm_music_${currentUser}`;
     localStorage.setItem(key, JSON.stringify(musicData));
-    renderContent();
+    renderList();
 }
 
 function escapeHtml(text) {
@@ -135,122 +138,163 @@ function escapeHtml(text) {
         .replace(/'/g, "&#039;");
 }
 
-// Сортировка данных
-function getSortedData(list) {
-    const sorted = [...list];
-    switch(currentSort) {
-        case 'rating_desc': sorted.sort((a, b) => b.rating - a.rating); break;
-        case 'rating_asc': sorted.sort((a, b) => a.rating - b.rating); break;
-        case 'date_desc': sorted.sort((a, b) => new Date(b.date) - new Date(a.date)); break;
-        case 'date_asc': sorted.sort((a, b) => new Date(a.date) - new Date(b.date)); break;
-        case 'alpha_asc': sorted.sort((a, b) => a.title.localeCompare(b.title)); break;
-        case 'alpha_desc': sorted.sort((a, b) => b.title.localeCompare(a.title)); break;
-    }
-    return sorted;
+function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('ru-RU');
 }
 
-// Группировка по месяцам
-function groupByMonth(list) {
-    const groups = {};
-    list.forEach(item => {
-        const dateObj = new Date(item.date);
-        const monthKey = dateObj.toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
-        // Capitalize first letter
-        const key = monthKey.charAt(0).toUpperCase() + monthKey.slice(1);
-        
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(item);
-    });
-    return groups;
+function getMonthYear(dateStr) {
+    if (!dateStr) return 'Без даты';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
 }
 
-function renderContent() {
-    contentArea.innerHTML = '';
+function updateControls() {
+    const prefix = currentTab === 'albums' ? 'альбом' : 'сингл';
+    addBtn.textContent = `+ Добавить ${prefix}`;
     
-    let list = currentTab === 'albums' ? musicData.albums : musicData.singles;
-    const sortedList = getSortedData(list);
-    const groupedData = groupByMonth(sortedList);
+    // Сброс сортировки при переключении табов можно добавить здесь, если нужно
+}
 
-    if (Object.keys(groupedData).length === 0) {
-        const emptyMsg = document.createElement('p');
-        emptyMsg.style.color = '#777';
-        emptyMsg.style.textAlign = 'center';
-        emptyMsg.style.marginTop = '40px';
-        emptyMsg.textContent = `Пока нет записей. Добавьте первую!`;
-        contentArea.appendChild(emptyMsg);
+function getSortedList() {
+    let list = currentTab === 'albums' ? [...musicData.albums] : [...musicData.singles];
+    const sortType = sortSelect.value;
+
+    list.sort((a, b) => {
+        if (sortType === 'rating-desc') return b.rating - a.rating;
+        if (sortType === 'rating-asc') return a.rating - b.rating;
+        if (sortType === 'date-desc') return new Date(b.date) - new Date(a.date);
+        if (sortType === 'date-asc') return new Date(a.date) - new Date(b.date);
+        return 0;
+    });
+
+    // Группировка по месяцам не требуется в самом массиве, но рендеринг может учитывать
+    // Для простоты возвращаем плоский отсортированный список, а заголовки месяцев добавим в renderList
+    return list;
+}
+
+function renderList() {
+    contentArea.innerHTML = '';
+    const sortedList = getSortedList();
+    
+    if (sortedList.length === 0) {
+        contentArea.innerHTML = `<p style="text-align:center; color:#777; margin-top:50px;">Список пуст. Добавьте первый ${currentTab === 'albums' ? 'альбом' : 'сингл'}!</p>`;
         return;
     }
 
-    // Рендеринг по группам (месяцам)
-    for (const [month, items] of Object.entries(groupedData)) {
-        const groupDiv = document.createElement('div');
-        groupDiv.className = 'month-group';
+    let lastMonth = '';
+
+    sortedList.forEach((item, originalIndex) => {
+        // Находим оригинальный индекс в массиве musicData для корректного удаления/редактирования
+        // Так как мы сортируем копию, нам нужно найти item в исходном массиве или хранить ID.
+        // Для упрощения будем искать по совпадению свойств (в реальном проекте лучше использовать UUID)
+        const sourceList = currentTab === 'albums' ? musicData.albums : musicData.singles;
+        const realIndex = sourceList.indexOf(item);
+
+        // Заголовок месяца
+        const itemMonth = getMonthYear(item.date);
+        if (itemMonth !== lastMonth) {
+            const monthHeader = document.createElement('h3');
+            monthHeader.style.color = '#1db954';
+            monthHeader.style.marginTop = '20px';
+            monthHeader.style.fontSize = '0.9rem';
+            monthHeader.style.textTransform = 'uppercase';
+            monthHeader.textContent = itemMonth;
+            contentArea.appendChild(monthHeader);
+            lastMonth = itemMonth;
+        }
+
+        const card = document.createElement('div');
+        card.className = 'compact-card';
+        card.onclick = () => openDetailModal(realIndex);
+
+        let chartInfo = '';
+        if (currentTab === 'albums' && item.chartName && item.chartPos) {
+            chartInfo = `<span style="font-size:0.75rem; color:#1db954; margin-top:2px;">#${item.chartPos} ${escapeHtml(item.chartName)}</span>`;
+        }
+
+        card.innerHTML = `
+            <div class="card-main-info">
+                <div class="card-title">${escapeHtml(item.title)}</div>
+                <div class="card-sub">${escapeHtml(item.artist)}</div>
+                ${chartInfo}
+            </div>
+            <div class="card-rating-badge">${parseFloat(item.rating).toFixed(1)}</div>
+        `;
+        contentArea.appendChild(card);
+    });
+}
+
+// --- Детальный просмотр ---
+
+function openDetailModal(index) {
+    currentViewIndex = index;
+    const item = currentTab === 'albums' ? musicData.albums[index] : musicData.singles[index];
+    
+    if (currentTab === 'albums') {
+        document.getElementById('detail-title').textContent = item.title;
+        document.getElementById('detail-artist').textContent = item.artist;
+        document.getElementById('detail-rating').textContent = parseFloat(item.rating).toFixed(1);
+        document.getElementById('detail-date').textContent = `Оценка от: ${formatDate(item.date)}`;
         
-        const title = document.createElement('div');
-        title.className = 'month-title';
-        title.textContent = month;
-        groupDiv.appendChild(title);
+        let chartText = '';
+        if (item.chartName && item.chartPos) {
+            chartText = `Топ #${item.chartPos} ${item.chartName}`;
+            document.getElementById('detail-chart-info').style.display = 'inline-block';
+            document.getElementById('detail-chart-info').textContent = chartText;
+        } else {
+            document.getElementById('detail-chart-info').style.display = 'none';
+        }
 
-        items.forEach(item => {
-            // Находим оригинальный индекс для редактирования/удаления
-            const originalIndex = currentTab === 'albums' 
-                ? musicData.albums.findIndex(i => i === item) 
-                : musicData.singles.findIndex(i => i === item);
-
-            const card = document.createElement('div');
-            card.className = `card ${item.rating >= 4.5 ? 'high-rated' : ''}`;
+        const tracksList = document.getElementById('detail-tracks-list');
+        tracksList.innerHTML = '';
+        
+        if (item.tracks && item.tracks.length > 0) {
+            // Сортировка треков по рейтингу (убывание)
+            const sortedTracks = [...item.tracks].sort((a, b) => b.rating - a.rating);
             
-            let extraHtml = '';
-            if (currentTab === 'albums' && item.chartName) {
-                const posText = item.chartPos ? `#${item.chartPos} ` : '';
-                extraHtml = `<div class="card-extra">${posText}${escapeHtml(item.chartName)}</div>`;
-            }
-
-            let infoHtml = `<div class="card-header">
-                <div class="card-info">
-                    <h3>${escapeHtml(item.title)} <span class="rating-badge">${item.rating}</span></h3>
-                    <div class="card-meta">${escapeHtml(item.artist)} • ${new Date(item.date).toLocaleDateString('ru-RU')}</div>
-                    ${extraHtml}
-                </div>
-                <div class="card-actions">
-                    <button class="edit-btn small-btn" onclick="editItem(${originalIndex})">✎</button>
-                    <button class="delete-btn small-btn" onclick="deleteItem(${originalIndex})">🗑</button>
-                </div>
-            </div>`;
-            
-            if (currentTab === 'albums' && item.tracks && item.tracks.length > 0) {
-                infoHtml += `<div class="track-list">`;
-                item.tracks.forEach(track => {
-                    const playsText = track.plays ? ` • 👁 ${track.plays}` : '';
-                    infoHtml += `<div class="track-item">
-                        <span class="track-name">${escapeHtml(track.name)}</span>
-                        <div class="track-stats">
-                            <span class="track-rating">${track.rating}</span>${playsText}
-                        </div>
-                    </div>`;
-                });
-                infoHtml += `</div>`;
-            }
-            
-            card.innerHTML = infoHtml;
-            groupDiv.appendChild(card);
-        });
-
-        contentArea.appendChild(groupDiv);
+            sortedTracks.forEach(track => {
+                const row = document.createElement('div');
+                row.className = 'track-row';
+                const plays = track.plays ? `• ${track.plays} прослушиваний` : '';
+                row.innerHTML = `
+                    <div>
+                        <span>${escapeHtml(track.name)}</span>
+                        <span class="track-plays-info">${plays}</span>
+                    </div>
+                    <span style="color:#ffd700; font-weight:bold;">${parseFloat(track.rating).toFixed(1)}</span>
+                `;
+                tracksList.appendChild(row);
+            });
+        } else {
+            tracksList.innerHTML = '<div style="color:#777; text-align:center;">Треков нет</div>';
+        }
+        
+        albumDetailModal.style.display = 'block';
+    } else {
+        document.getElementById('single-detail-title').textContent = item.title;
+        document.getElementById('single-detail-artist').textContent = item.artist;
+        document.getElementById('single-detail-rating').textContent = parseFloat(item.rating).toFixed(1);
+        document.getElementById('single-detail-date').textContent = `Оценка от: ${formatDate(item.date)}`;
+        singleDetailModal.style.display = 'block';
     }
 }
 
-function openModal(type, editIndex = null) {
-    const isAlbum = type === 'albums';
-    const modal = isAlbum ? albumModal : singleModal;
+// --- Формы добавления/редактирования ---
+
+function openFormModal(editIndex = null) {
+    const isAlbum = currentTab === 'albums';
+    const modal = isAlbum ? albumFormModal : singleFormModal;
     const form = isAlbum ? albumForm : singleForm;
-    const titleEl = document.getElementById(isAlbum ? 'album-modal-title' : 'single-modal-title');
+    const titleEl = document.getElementById(isAlbum ? 'album-form-title' : 'single-form-title');
     
     form.reset();
-    tracksContainer.innerHTML = '';
+    if (isAlbum) tracksContainer.innerHTML = '';
     
-    // Дата по умолчанию сегодня
+    // Установка сегодняшней даты по умолчанию
     const today = new Date().toISOString().split('T')[0];
+    document.getElementById(isAlbum ? 'album-date' : 'single-date').value = today;
 
     if (editIndex !== null) {
         const item = isAlbum ? musicData.albums[editIndex] : musicData.singles[editIndex];
@@ -260,25 +304,19 @@ function openModal(type, editIndex = null) {
         document.getElementById(isAlbum ? 'album-rating' : 'single-rating').value = item.rating;
         document.getElementById(isAlbum ? 'album-date' : 'single-date').value = item.date || today;
         
-        if(isAlbum) {
+        if (isAlbum) {
             document.getElementById('album-chart-name').value = item.chartName || '';
             document.getElementById('album-chart-pos').value = item.chartPos || '';
+            if (item.tracks) {
+                item.tracks.forEach(track => addTrackField(track.name, track.rating, track.plays));
+            }
         }
-
-        titleEl.textContent = `Редактировать ${isAlbum ? 'альбом' : 'сингл'}`;
         
-        if (isAlbum && item.tracks) {
-            item.tracks.forEach(track => addTrackField(track.name, track.rating, track.plays));
-        }
+        titleEl.textContent = `Редактировать ${isAlbum ? 'альбом' : 'сингл'}`;
     } else {
         document.getElementById(isAlbum ? 'album-id' : 'single-id').value = '';
-        document.getElementById(isAlbum ? 'album-date' : 'single-date').value = today;
         titleEl.textContent = `Добавить ${isAlbum ? 'альбом' : 'сингл'}`;
-        if(isAlbum) {
-            document.getElementById('album-chart-name').value = '';
-            document.getElementById('album-chart-pos').value = '';
-            addTrackField(); // Один пустой трек по умолчанию
-        }
+        if (isAlbum) addTrackField(); // Один пустой трек по умолчанию
     }
     
     modal.style.display = "block";
@@ -288,9 +326,9 @@ function addTrackField(name = '', rating = '', plays = '') {
     const div = document.createElement('div');
     div.className = 'track-input-group';
     div.innerHTML = `
-        <input type="text" placeholder="Трек" class="track-name t-name" value="${escapeHtml(name)}" required>
-        <input type="number" step="0.1" placeholder="Оц." class="track-rating t-rating" min="0" max="5" value="${rating}" required>
-        <input type="number" placeholder="Прос." class="track-plays t-plays" min="0" value="${plays}">
+        <input type="text" placeholder="Название трека" class="track-name" value="${escapeHtml(name)}" required>
+        <input type="number" placeholder="Рейт" step="0.1" min="0" max="5" class="track-rating" value="${rating}" style="width: 50px;" required>
+        <input type="number" placeholder="Просл." class="track-plays" value="${plays}" style="width: 60px;">
         <button type="button" class="remove-track-btn" onclick="this.parentElement.remove()">×</button>
     `;
     tracksContainer.appendChild(div);
@@ -311,7 +349,9 @@ function saveAlbum(e) {
         const tName = group.querySelector('.track-name').value;
         const tRating = parseFloat(group.querySelector('.track-rating').value);
         const tPlays = group.querySelector('.track-plays').value;
-        if(tName) tracks.push({ name: tName, rating: tRating, plays: tPlays ? parseInt(tPlays) : 0 });
+        if (tName) {
+            tracks.push({ name: tName, rating: tRating, plays: tPlays ? parseInt(tPlays) : 0 });
+        }
     });
 
     const album = { artist, title, rating, date, chartName, chartPos, tracks };
@@ -323,7 +363,10 @@ function saveAlbum(e) {
     }
     
     saveMusicData();
-    albumModal.style.display = "none";
+    albumFormModal.style.display = "none";
+    // Если мы были в детальном просмотре этого же альбома, обновить его не получится просто так, 
+    // поэтому просто закрываем все модалки и перерисовываем список. Пользователь откроет снова.
+    albumDetailModal.style.display = "none"; 
 }
 
 function saveSingle(e) {
@@ -343,15 +386,11 @@ function saveSingle(e) {
     }
     
     saveMusicData();
-    singleModal.style.display = "none";
+    singleFormModal.style.display = "none";
+    singleDetailModal.style.display = "none";
 }
 
-// Глобальные функции для доступа из HTML
-window.editItem = function(index) {
-    openModal(currentTab, index);
-};
-
-window.deleteItem = function(index) {
+function deleteItem(index) {
     if(confirm('Вы уверены, что хотите удалить эту запись?')) {
         if (currentTab === 'albums') {
             musicData.albums.splice(index, 1);
@@ -359,105 +398,7 @@ window.deleteItem = function(index) {
             musicData.singles.splice(index, 1);
         }
         saveMusicData();
+        albumDetailModal.style.display = "none";
+        singleDetailModal.style.display = "none";
     }
-};
-
-// Открытие модалки по кнопке из renderContent (динамически создаваемой)
-// Перехватываем клики по кнопкам добавления через делегирование или перерисовку
-// В данном случае проще добавить обработчик на кнопку в header при рендере, 
-// но так как мы перезаписываем innerHTML, сделаем это внутри renderContent через создание кнопки.
-// Чтобы не усложнять, добавим кнопку "Добавить" прямо в HTML структуру при рендере.
-
-// Переопределим renderContent для добавления кнопки "Добавить"
-const originalRenderContent = renderContent;
-renderContent = function() {
-    contentArea.innerHTML = '';
-    
-    // Кнопка добавления
-    const headerControls = document.createElement('div');
-    headerControls.style.display = 'flex';
-    headerControls.style.justifyContent = 'space-between';
-    headerControls.style.alignItems = 'center';
-    headerControls.style.marginBottom = '15px';
-    
-    const addBtn = document.createElement('button');
-    addBtn.className = 'primary-btn';
-    addBtn.style.width = 'auto';
-    addBtn.style.padding = '6px 12px';
-    addBtn.textContent = `+ Добавить ${currentTab === 'albums' ? 'альбом' : 'сингл'}`;
-    addBtn.onclick = () => openModal(currentTab);
-    
-    headerControls.appendChild(addBtn);
-    contentArea.appendChild(headerControls);
-
-    // Вызов основной логики отрисовки списка
-    let list = currentTab === 'albums' ? musicData.albums : musicData.singles;
-    const sortedList = getSortedData(list);
-    const groupedData = groupByMonth(sortedList);
-
-    if (Object.keys(groupedData).length === 0) {
-        const emptyMsg = document.createElement('p');
-        emptyMsg.style.color = '#777';
-        emptyMsg.style.textAlign = 'center';
-        emptyMsg.style.marginTop = '40px';
-        emptyMsg.textContent = `Пока нет записей. Нажмите кнопку выше, чтобы добавить.`;
-        contentArea.appendChild(emptyMsg);
-        return;
-    }
-
-    for (const [month, items] of Object.entries(groupedData)) {
-        const groupDiv = document.createElement('div');
-        groupDiv.className = 'month-group';
-        
-        const title = document.createElement('div');
-        title.className = 'month-title';
-        title.textContent = month;
-        groupDiv.appendChild(title);
-
-        items.forEach(item => {
-            const originalIndex = currentTab === 'albums' 
-                ? musicData.albums.findIndex(i => i === item) 
-                : musicData.singles.findIndex(i => i === item);
-
-            const card = document.createElement('div');
-            card.className = `card ${item.rating >= 4.5 ? 'high-rated' : ''}`;
-            
-            let extraHtml = '';
-            if (currentTab === 'albums' && item.chartName) {
-                const posText = item.chartPos ? `#${item.chartPos} ` : '';
-                extraHtml = `<div class="card-extra">${posText}${escapeHtml(item.chartName)}</div>`;
-            }
-
-            let infoHtml = `<div class="card-header">
-                <div class="card-info">
-                    <h3>${escapeHtml(item.title)} <span class="rating-badge">${item.rating}</span></h3>
-                    <div class="card-meta">${escapeHtml(item.artist)} • ${new Date(item.date).toLocaleDateString('ru-RU')}</div>
-                    ${extraHtml}
-                </div>
-                <div class="card-actions">
-                    <button class="edit-btn small-btn" onclick="editItem(${originalIndex})">✎</button>
-                    <button class="delete-btn small-btn" onclick="deleteItem(${originalIndex})">🗑</button>
-                </div>
-            </div>`;
-            
-            if (currentTab === 'albums' && item.tracks && item.tracks.length > 0) {
-                infoHtml += `<div class="track-list">`;
-                item.tracks.forEach(track => {
-                    const playsText = track.plays ? ` • 👁 ${track.plays}` : '';
-                    infoHtml += `<div class="track-item">
-                        <span class="track-name">${escapeHtml(track.name)}</span>
-                        <div class="track-stats">
-                            <span class="track-rating">${track.rating}</span>${playsText}
-                        </div>
-                    </div>`;
-                });
-                infoHtml += `</div>`;
-            }
-            
-            card.innerHTML = infoHtml;
-            groupDiv.appendChild(card);
-        });
-
-        contentArea.appendChild(groupDiv);
-    }
-};
+}
