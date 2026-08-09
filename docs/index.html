@@ -11,7 +11,7 @@
         <h1>MuzWorm</h1>
         <form id="login-form">
             <input type="text" id="username" placeholder="Имя пользователя" required>
-            <button type="submit" class="primary-btn">Войти / Регистрация</button>
+            <button type="submit">Войти / Регистрация</button>
         </form>
     </div>
 
@@ -20,7 +20,7 @@
             <h1>MuzWorm</h1>
             <div id="user-info">
                 <span id="welcome-msg"></span>
-                <button id="logout-btn" class="secondary-btn">Выйти</button>
+                <button id="logout-btn">Выйти</button>
             </div>
         </header>
 
@@ -29,75 +29,28 @@
             <button class="tab-btn" data-tab="singles">Синглы</button>
         </nav>
 
-        <div class="controls-bar">
-            <div class="control-group">
-                <label>Сортировка:</label>
-                <select id="sort-select">
-                    <option value="date-desc">По дате оценки (новые)</option>
-                    <option value="date-asc">По дате оценки (старые)</option>
-                    <option value="rating-desc">По рейтингу (высокий)</option>
-                    <option value="rating-asc">По рейтингу (низкий)</option>
+        <div id="controls-area" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+            <div class="sort-controls">
+                <label style="color:#aaa; font-size: 0.9rem;">Сортировка:</label>
+                <select id="global-sort" style="padding: 5px; background: #333; color: white; border: none; border-radius: 4px;">
+                    <option value="date-desc">Дата оценки (новые)</option>
+                    <option value="date-asc">Дата оценки (старые)</option>
+                    <option value="rating-desc">Рейтинг (высокий)</option>
+                    <option value="rating-asc">Рейтинг (низкий)</option>
                 </select>
             </div>
-            <button id="add-btn" class="primary-btn">+ Добавить</button>
         </div>
 
         <main id="content-area">
-            <!-- Список карточек -->
-            <div id="items-list"></div>
+            <!-- Контент загружается через JS -->
         </main>
     </div>
 
-    <!-- Модальное окно: Детальный просмотр Альбома -->
-    <div id="album-detail-modal" class="modal">
-        <div class="modal-content modal-large">
-            <span class="close">&times;</span>
-            <div class="detail-header">
-                <h2 id="detail-title">Название альбома</h2>
-                <div class="detail-meta">
-                    <span id="detail-artist">Исполнитель</span>
-                    <span class="badge" id="detail-chart-info">Топ #1 Global</span>
-                </div>
-                <div class="detail-rating-block">
-                    <span class="big-rating" id="detail-rating">5.0</span>
-                    <span class="rating-date" id="detail-date">Оценка от: 01.01.2024</span>
-                </div>
-            </div>
-            
-            <h3>Треки (по рейтингу)</h3>
-            <div id="detail-tracks-list" class="scrollable-list">
-                <!-- Треки рендерятся здесь -->
-            </div>
-
-            <div class="modal-actions">
-                <button id="edit-album-btn" class="primary-btn">Редактировать</button>
-                <button id="delete-album-btn" class="danger-btn">Удалить</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Модальное окно: Детальный просмотр Сингла -->
-    <div id="single-detail-modal" class="modal">
-        <div class="modal-content">
-            <span class="close">&times;</span>
-            <h2 id="single-detail-title">Название сингла</h2>
-            <p id="single-detail-artist">Исполнитель</p>
-            <div class="detail-rating-block">
-                <span class="big-rating" id="single-detail-rating">5.0</span>
-                <span class="rating-date" id="single-detail-date">Оценка от: 01.01.2024</span>
-            </div>
-            <div class="modal-actions">
-                <button id="edit-single-btn" class="primary-btn">Редактировать</button>
-                <button id="delete-single-btn" class="danger-btn">Удалить</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Модальное окно: Форма добавления/редактирования (Альбом) -->
-    <div id="album-form-modal" class="modal">
+    <!-- Модальное окно для Альбома (Добавление/Редактирование) -->
+    <div id="album-modal" class="modal">
         <div class="modal-content modal-scrollable">
             <span class="close">&times;</span>
-            <h2 id="album-form-title">Добавить альбом</h2>
+            <h2 id="album-modal-title">Добавить альбом</h2>
             <form id="album-form">
                 <input type="hidden" id="album-id">
                 <div class="form-row">
@@ -112,8 +65,8 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Рейтинг (0.0 - 5.0):</label>
-                        <input type="number" id="album-rating" step="0.1" min="0" max="5" required>
+                        <label>Оценка (0.0-5.0):</label>
+                        <input type="number" id="album-rating" step="0.1" min="0" max="5" value="0.0" required>
                     </div>
                     <div class="form-group">
                         <label>Дата оценки:</label>
@@ -122,8 +75,8 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Название чарта:</label>
-                        <input type="text" id="album-chart-name" placeholder="Например: Global Top 200">
+                        <label>Топ:</label>
+                        <input type="text" id="album-chart-name" placeholder="Например: Billboard 200">
                     </div>
                     <div class="form-group">
                         <label>Место в топе:</label>
@@ -132,7 +85,7 @@
                 </div>
                 
                 <div class="form-group">
-                    <label>Треки (сортируются по рейтингу):</label>
+                    <label>Трек-лист:</label>
                     <div id="tracks-container"></div>
                     <button type="button" id="add-track-btn" class="secondary-btn">+ Добавить трек</button>
                 </div>
@@ -142,11 +95,11 @@
         </div>
     </div>
 
-    <!-- Модальное окно: Форма добавления/редактирования (Сингл) -->
-    <div id="single-form-modal" class="modal">
+    <!-- Модальное окно для Сингла (Добавление/Редактирование) -->
+    <div id="single-modal" class="modal">
         <div class="modal-content">
             <span class="close">&times;</span>
-            <h2 id="single-form-title">Добавить сингл</h2>
+            <h2 id="single-modal-title">Добавить сингл</h2>
             <form id="single-form">
                 <input type="hidden" id="single-id">
                 <div class="form-group">
@@ -159,8 +112,8 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Рейтинг (0.0 - 5.0):</label>
-                        <input type="number" id="single-rating" step="0.1" min="0" max="5" required>
+                        <label>Оценка (0.0-5.0):</label>
+                        <input type="number" id="single-rating" step="0.1" min="0" max="5" value="0.0" required>
                     </div>
                     <div class="form-group">
                         <label>Дата оценки:</label>
@@ -169,6 +122,14 @@
                 </div>
                 <button type="submit" class="primary-btn">Сохранить</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно Детального просмотра Альбома -->
+    <div id="album-detail-modal" class="modal">
+        <div class="modal-content modal-scrollable">
+            <span class="close" onclick="closeAlbumDetail()">&times;</span>
+            <div id="album-detail-content"></div>
         </div>
     </div>
 
