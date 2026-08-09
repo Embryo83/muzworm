@@ -8,14 +8,40 @@ dotenv.config();
 
 const authRoutes = require('./routes/auth');
 const profileRoutes = require('./routes/profile');
+const User = require('./models/User');
 
 const app = express();
 app.use(express.json());
 
 const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/muzworm';
 
+async function ensureAdmin() {
+  try {
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    if (!adminEmail || !adminPassword) return;
+
+    const existing = await User.findOne({ email: adminEmail.toLowerCase() });
+    if (existing) {
+      console.log('Admin already exists:', existing.email);
+      return;
+    }
+
+    const passwordHash = await User.hashPassword(adminPassword);
+    const user = new User({ email: adminEmail, passwordHash, isAdmin: true, profilePublic: false });
+    await user.save();
+    console.log('Admin user created:', user.email);
+  } catch (err) {
+    console.error('Failed to ensure admin user:', err);
+  }
+}
+
 mongoose.connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('Connected to MongoDB'))
+  .then(async () => {
+    console.log('Connected to MongoDB');
+    // Create admin user automatically if env vars are set
+    await ensureAdmin();
+  })
   .catch(err => { console.error('MongoDB connection error:', err); process.exit(1); });
 
 app.use(session({
