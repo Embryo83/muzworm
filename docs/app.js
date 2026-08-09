@@ -2,8 +2,7 @@
 let currentUser = null;
 let currentTab = 'albums';
 let musicData = { albums: [], singles: [] };
-let currentSortMode = 'date-desc'; // global sort
-let currentTrackSort = 'order'; // order, rating, plays
+let currentAlbumForDetail = null; // Для хранения текущего просматриваемого альбома
 
 // Элементы DOM
 const authContainer = document.getElementById('auth-container');
@@ -12,10 +11,10 @@ const loginForm = document.getElementById('login-form');
 const logoutBtn = document.getElementById('logout-btn');
 const welcomeMsg = document.getElementById('welcome-msg');
 const contentArea = document.getElementById('content-area');
+const cardsContainer = document.getElementById('cards-container');
 const tabBtns = document.querySelectorAll('.tab-btn');
-const globalSortSelect = document.getElementById('global-sort');
 
-// Модальные окна
+// Модалки
 const albumModal = document.getElementById('album-modal');
 const singleModal = document.getElementById('single-modal');
 const albumDetailModal = document.getElementById('album-detail-modal');
@@ -24,15 +23,26 @@ const singleForm = document.getElementById('single-form');
 const addTrackBtn = document.getElementById('add-track-btn');
 const tracksContainer = document.getElementById('tracks-container');
 
+// Топы
+const albumTopMonthInput = document.getElementById('album-top-month');
+const trackTopMonthInput = document.getElementById('track-top-month');
+const albumTopList = document.getElementById('album-top-list');
+const trackTopList = document.getElementById('track-top-list');
+
 // Инициализация
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
     setupEventListeners();
-    // Установка сегодняшней даты по умолчанию
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('album-date').value = today;
-    document.getElementById('single-date').value = today;
+    setDefaultDates();
 });
+
+function setDefaultDates() {
+    const today = new Date().toISOString().split('T')[0];
+    const monthInputVal = today.substring(0, 7); // YYYY-MM
+    
+    if(albumTopMonthInput) albumTopMonthInput.value = monthInputVal;
+    if(trackTopMonthInput) trackTopMonthInput.value = monthInputVal;
+}
 
 function checkAuth() {
     const storedUser = localStorage.getItem('muzworm_user');
@@ -54,8 +64,15 @@ function showApp() {
     appContainer.style.display = 'block';
     welcomeMsg.textContent = `Привет, ${currentUser}!`;
     loadMusicData();
+    
+    // Установка текущей даты для инпутов в модалках при первом открытии
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('album-date').value = today;
+    document.getElementById('single-date').value = today;
+
     renderContent();
-}
+    renderTops();
+});
 
 function setupEventListeners() {
     loginForm.addEventListener('submit', (e) => {
@@ -80,34 +97,41 @@ function setupEventListeners() {
             btn.classList.add('active');
             currentTab = btn.dataset.tab;
             renderContent();
+            renderTops();
         });
     });
 
-    globalSortSelect.addEventListener('change', (e) => {
-        currentSortMode = e.target.value;
-        renderContent();
-    });
-
-    // Album Modal Close
-    document.querySelectorAll('#album-modal .close').forEach(span => {
-        span.onclick = () => albumModal.style.display = "none";
-    });
-    
-    // Single Modal Close
-    document.querySelectorAll('#single-modal .close').forEach(span => {
-        span.onclick = () => singleModal.style.display = "none";
+    // Закрытие модалок
+    document.querySelectorAll('.close').forEach(span => {
+        span.onclick = function() {
+            albumModal.style.display = "none";
+            singleModal.style.display = "none";
+            albumDetailModal.style.display = "none";
+        }
     });
 
     window.onclick = (event) => {
         if (event.target == albumModal) albumModal.style.display = "none";
         if (event.target == singleModal) singleModal.style.display = "none";
-        if (event.target == albumDetailModal) closeAlbumDetail();
+        if (event.target == albumDetailModal) albumDetailModal.style.display = "none";
     };
 
-    addTrackBtn.addEventListener('click', () => addTrackField());
-    
+    addTrackBtn.addEventListener('click', addTrackField);
     albumForm.addEventListener('submit', saveAlbum);
     singleForm.addEventListener('submit', saveSingle);
+
+    // Изменение месяца в топах
+    albumTopMonthInput.addEventListener('change', renderTops);
+    trackTopMonthInput.addEventListener('change', renderTops);
+
+    // Сортировка в детальном просмотре
+    document.querySelectorAll('.sort-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            renderDetailTracks(e.target.dataset.sort);
+        });
+    });
 }
 
 function loadMusicData() {
@@ -124,6 +148,7 @@ function saveMusicData() {
     const key = `muzworm_music_${currentUser}`;
     localStorage.setItem(key, JSON.stringify(musicData));
     renderContent();
+    renderTops();
 }
 
 function escapeHtml(text) {
@@ -136,93 +161,197 @@ function escapeHtml(text) {
         .replace(/'/g, "&#039;");
 }
 
-function formatDate(dateStr) {
-    if(!dateStr) return '';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('ru-RU', { year: 'numeric', month: 'long' });
-}
-
-function getSortValue(item) {
-    if (currentSortMode === 'rating-desc') return -parseFloat(item.rating || 0);
-    if (currentSortMode === 'rating-asc') return parseFloat(item.rating || 0);
-    if (currentSortMode === 'date-asc') return new Date(item.date || '1970-01-01');
-    // date-desc (default)
-    return -new Date(item.date || '1970-01-01');
-}
-
 function renderContent() {
-    contentArea.innerHTML = '';
+    cardsContainer.innerHTML = '';
     
-    const header = document.createElement('div');
-    header.style.marginBottom = '10px';
-    header.innerHTML = `<h2>${currentTab === 'albums' ? 'Мои Альбомы' : 'Мои Синглы'}</h2>`;
+    // Хедер с кнопкой и фильтрами
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'content-header';
     
+    const title = document.createElement('h2');
+    title.textContent = currentTab === 'albums' ? 'Мои Альбомы' : 'Мои Синглы';
+    
+    const controls = document.createElement('div');
+    controls.className = 'controls-row';
+    
+    // Кнопка добавить
     const addBtn = document.createElement('button');
-    addBtn.className = 'primary-btn';
-    addBtn.style.width = 'auto';
-    addBtn.style.float = 'right';
+    addBtn.className = 'add-btn';
     addBtn.textContent = `+ Добавить ${currentTab === 'albums' ? 'альбом' : 'сингл'}`;
     addBtn.onclick = (e) => {
-        e.stopPropagation();
+        e.stopPropagation(); // Чтобы не триггерить клик по карточке если бы он был
         openModal(currentTab);
     };
     
-    header.appendChild(addBtn);
-    contentArea.appendChild(header);
+    // Сортировка списка (по дате оценки)
+    const sortSelect = document.createElement('select');
+    sortSelect.onchange = (e) => renderCardsList(e.target.value);
+    sortSelect.innerHTML = `
+        <option value="date_desc">Сначала новые (по дате оценки)</option>
+        <option value="date_asc">Сначала старые (по дате оценки)</option>
+        <option value="rating_desc">По рейтингу (высокий)</option>
+        <option value="rating_asc">По рейтингу (низкий)</option>
+    `;
 
-    let list = currentTab === 'albums' ? [...musicData.albums] : [...musicData.singles];
+    controls.appendChild(sortSelect);
+    controls.appendChild(addBtn);
     
-    // Сортировка списка
-    list.sort((a, b) => getSortValue(a) - getSortValue(b));
+    headerDiv.appendChild(title);
+    headerDiv.appendChild(controls);
+    cardsContainer.appendChild(headerDiv);
+
+    // Контейнер для карточек
+    const listContainer = document.createElement('div');
+    listContainer.id = 'main-cards-list';
+    cardsContainer.appendChild(listContainer);
+
+    renderCardsList('date_desc');
+}
+
+function renderCardsList(sortType = 'date_desc') {
+    const listContainer = document.getElementById('main-cards-list');
+    listContainer.innerHTML = '';
+    
+    let list = currentTab === 'albums' ? [...musicData.albums] : [...musicData.singles];
+
+    // Сортировка
+    list.sort((a, b) => {
+        const dateA = new Date(a.date || '1970-01-01');
+        const dateB = new Date(b.date || '1970-01-01');
+        const rateA = parseFloat(a.rating) || 0;
+        const rateB = parseFloat(b.rating) || 0;
+
+        if (sortType === 'date_desc') return dateB - dateA;
+        if (sortType === 'date_asc') return dateA - dateB;
+        if (sortType === 'rating_desc') return rateB - rateA;
+        if (sortType === 'rating_asc') return rateA - rateB;
+        return 0;
+    });
 
     if (list.length === 0) {
         const emptyMsg = document.createElement('p');
         emptyMsg.style.color = '#777';
         emptyMsg.style.textAlign = 'center';
-        emptyMsg.style.marginTop = '50px';
+        emptyMsg.style.padding = '20px';
         emptyMsg.textContent = `Пока нет ${currentTab === 'albums' ? 'альбомов' : 'синглов'}. Добавьте первый!`;
-        contentArea.appendChild(emptyMsg);
+        listContainer.appendChild(emptyMsg);
         return;
     }
 
-    list.forEach((item, originalIndex) => {
+    list.forEach((item, index) => {
         // Находим реальный индекс в исходном массиве для редактирования/удаления
-        const realIndex = (currentTab === 'albums' ? musicData.albums : musicData.singles).indexOf(item);
-
+        const originalIndex = (currentTab === 'albums' ? musicData.albums : musicData.singles).indexOf(item);
+        
         const card = document.createElement('div');
         card.className = 'card';
         
         // Клик по карточке открывает детали (только для альбомов)
         if (currentTab === 'albums') {
             card.onclick = (e) => {
-                // Игнорируем клик если нажали на кнопки действий
+                // Игнорируем клики по кнопкам действий
                 if(e.target.closest('.card-actions')) return;
-                openAlbumDetail(realIndex);
+                openAlbumDetail(originalIndex);
             };
         }
 
-        let infoHtml = `<div class="card-info">
-            <h3>${escapeHtml(item.title)}</h3>
-            <p>${escapeHtml(item.artist)}</p>`;
+        let metaHtml = `<div class="card-meta">
+            <span class="meta-item rating-stars">★ ${item.rating}</span>
+            <span class="meta-item">📅 ${item.date || 'Нет даты'}</span>`;
         
         if (currentTab === 'albums' && item.chartName) {
-            infoHtml += `<p class="track-preview">🏆 ${escapeHtml(item.chartName)} #${item.chartPos}</p>`;
+            metaHtml += `<span class="meta-item">🏆 ${item.chartName} #${item.chartPos || '?'}</span>`;
         }
-        infoHtml += `</div>`;
-        
-        const metaHtml = `
-            <div class="card-meta">
-                <span class="rating-badge">★ ${parseFloat(item.rating).toFixed(1)}</span>
-                <div class="card-actions">
-                    <button class="edit-btn" onclick="event.stopPropagation(); editItem(${realIndex})">✎</button>
-                    <button class="delete-btn" onclick="event.stopPropagation(); deleteItem(${realIndex})">🗑</button>
-                </div>
+        metaHtml += `</div>`;
+
+        card.innerHTML = `
+            <div class="card-info">
+                <h3>${escapeHtml(item.title)}</h3>
+                <p>${escapeHtml(item.artist)}</p>
+                ${metaHtml}
+            </div>
+            <div class="card-actions">
+                ${currentTab === 'albums' ? '<button class="view-btn" title="Открыть трек-лист">👁</button>' : ''}
+                <button class="edit-btn" onclick="event.stopPropagation(); editItem(${originalIndex})">✎</button>
+                <button class="delete-btn" onclick="event.stopPropagation(); deleteItem(${originalIndex})">🗑</button>
             </div>
         `;
         
-        card.innerHTML = infoHtml + metaHtml;
-        contentArea.appendChild(card);
+        listContainer.appendChild(card);
     });
+}
+
+function renderTops() {
+    const albumMonth = albumTopMonthInput.value;
+    const trackMonth = trackTopMonthInput.value;
+
+    // ТОП-10 Альбомов
+    let albumsToSort = musicData.albums.filter(a => a.date && a.date.startsWith(albumMonth));
+    albumsToSort.sort((a, b) => parseFloat(b.rating) - parseFloat(a.rating));
+    const top10Albums = albumsToSort.slice(0, 10);
+
+    albumTopList.innerHTML = '';
+    if (top10Albums.length === 0) {
+        albumTopList.innerHTML = '<div style="color:#666; font-size:0.8rem; text-align:center; padding:10px;">Нет данных за этот месяц</div>';
+    } else {
+        top10Albums.forEach((alb, idx) => {
+            const div = document.createElement('div');
+            div.className = 'top-item';
+            div.innerHTML = `
+                <span class="top-rank">#${idx + 1}</span>
+                <span class="top-info" title="${escapeHtml(alb.title)}">${escapeHtml(alb.title)}</span>
+                <span class="top-val">★${alb.rating}</span>
+            `;
+            div.onclick = () => openAlbumDetail(musicData.albums.indexOf(alb));
+            div.style.cursor = 'pointer';
+            albumTopList.appendChild(div);
+        });
+    }
+
+    // ТОП-20 Треков (из альбомов за выбранный месяц)
+    // Собираем все треки из альбомов, оцененных в выбранный месяц
+    let allTracks = [];
+    albumsToSort.forEach(alb => {
+        if (alb.tracks) {
+            alb.tracks.forEach(t => {
+                allTracks.push({
+                    name: t.name,
+                    rating: parseFloat(t.rating) || 0,
+                    plays: parseInt(t.plays) || 0,
+                    parentAlbum: alb.title,
+                    parentArtist: alb.artist,
+                    originalAlbumObj: alb
+                });
+            });
+        }
+    });
+
+    allTracks.sort((a, b) => b.rating - a.rating);
+    const top20Tracks = allTracks.slice(0, 20);
+
+    trackTopList.innerHTML = '';
+    if (top20Tracks.length === 0) {
+        trackTopList.innerHTML = '<div style="color:#666; font-size:0.8rem; text-align:center; padding:10px;">Нет треков за этот месяц</div>';
+    } else {
+        top20Tracks.forEach((trk, idx) => {
+            const div = document.createElement('div');
+            div.className = 'top-item';
+            div.innerHTML = `
+                <span class="top-rank">#${idx + 1}</span>
+                <div class="top-info" style="display:flex; flex-direction:column;">
+                    <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(trk.name)}</span>
+                    <span style="font-size:0.75rem; color:#666;">${escapeHtml(trk.parentArtist)}</span>
+                </div>
+                <span class="top-val">★${trk.rating}</span>
+            `;
+            // Клик по треку открывает альбом
+            div.onclick = () => {
+                const realIdx = musicData.albums.indexOf(trk.originalAlbumObj);
+                if(realIdx !== -1) openAlbumDetail(realIdx);
+            };
+            div.style.cursor = 'pointer';
+            trackTopList.appendChild(div);
+        });
+    }
 }
 
 function openModal(type, editIndex = null) {
@@ -233,10 +362,8 @@ function openModal(type, editIndex = null) {
     
     form.reset();
     tracksContainer.innerHTML = '';
-    
-    // Дата по умолчанию сегодня
     const today = new Date().toISOString().split('T')[0];
-
+    
     if (editIndex !== null) {
         const item = isAlbum ? musicData.albums[editIndex] : musicData.singles[editIndex];
         document.getElementById(isAlbum ? 'album-id' : 'single-id').value = editIndex;
@@ -254,14 +381,12 @@ function openModal(type, editIndex = null) {
         
         if (isAlbum && item.tracks) {
             item.tracks.forEach(track => addTrackField(track.name, track.rating, track.plays));
-        } else if (isAlbum) {
-            addTrackField(); // Один пустой трек по умолчанию при создании
         }
     } else {
         document.getElementById(isAlbum ? 'album-id' : 'single-id').value = '';
         document.getElementById(isAlbum ? 'album-date' : 'single-date').value = today;
         titleEl.textContent = `Добавить ${isAlbum ? 'альбом' : 'сингл'}`;
-        if(isAlbum) addTrackField();
+        if(isAlbum) addTrackField(); 
     }
     
     modal.style.display = "block";
@@ -270,14 +395,10 @@ function openModal(type, editIndex = null) {
 function addTrackField(name = '', rating = '', plays = '') {
     const div = document.createElement('div');
     div.className = 'track-input-group';
-    // Убедимся, что rating и plays имеют значения по умолчанию для видимости
-    const rVal = rating !== '' ? rating : '0.0';
-    const pVal = plays !== '' ? plays : '0';
-    
     div.innerHTML = `
-        <input type="text" placeholder="Название трека" class="track-name" value="${escapeHtml(name)}" required style="flex: 2;">
-        <input type="number" step="0.1" min="0" max="5" placeholder="Оц." class="track-rating" value="${rVal}" style="width: 50px;" required>
-        <input type="number" min="0" placeholder="Просл." class="track-plays" value="${pVal}" style="width: 60px;">
+        <input type="text" placeholder="Название трека" class="track-name" value="${escapeHtml(name)}" required>
+        <input type="number" placeholder="Оценка" class="track-rating" step="0.1" min="0" max="5" value="${rating}" style="width: 60px;" required>
+        <input type="number" placeholder="Просл." class="track-plays" min="0" value="${plays}" style="width: 70px;" title="Количество прослушиваний">
         <button type="button" class="remove-track-btn" onclick="this.parentElement.remove()">×</button>
     `;
     tracksContainer.appendChild(div);
@@ -297,17 +418,11 @@ function saveAlbum(e) {
     document.querySelectorAll('.track-input-group').forEach(group => {
         const tName = group.querySelector('.track-name').value;
         const tRating = group.querySelector('.track-rating').value;
-        const tPlays = group.querySelector('.track-plays').value;
-        if(tName) {
-            tracks.push({ 
-                name: tName, 
-                rating: parseFloat(tRating) || 0, 
-                plays: parseInt(tPlays) || 0 
-            });
-        }
+        const tPlays = group.querySelector('.track-plays').value || 0;
+        if(tName) tracks.push({ name: tName, rating: tRating, plays: tPlays });
     });
 
-    const album = { artist, title, rating: parseFloat(rating), date, chartName, chartPos, tracks };
+    const album = { artist, title, rating, date, chartName, chartPos, tracks };
 
     if (id === '') {
         musicData.albums.push(album);
@@ -327,7 +442,7 @@ function saveSingle(e) {
     const rating = document.getElementById('single-rating').value;
     const date = document.getElementById('single-date').value;
     
-    const single = { artist, title, rating: parseFloat(rating), date };
+    const single = { artist, title, rating, date };
 
     if (id === '') {
         musicData.singles.push(single);
@@ -339,86 +454,71 @@ function saveSingle(e) {
     singleModal.style.display = "none";
 }
 
-// --- Детальный просмотр альбома ---
-
-window.openAlbumDetail = function(index) {
+// Детальный просмотр альбома
+function openAlbumDetail(index) {
     const album = musicData.albums[index];
     if (!album) return;
 
-    const content = document.getElementById('album-detail-content');
-    
-    // Сохраняем индекс для кнопок редактирования/удаления внутри модалки
-    content.dataset.index = index;
+    currentAlbumForDetail = album; // Сохраняем ссылку для сортировки
 
-    let tracksHtml = '';
-    // Копируем треки для сортировки без изменения оригинала
-    let displayTracks = [...(album.tracks || [])];
+    document.getElementById('detail-title').textContent = album.title;
+    document.getElementById('detail-artist').textContent = album.artist;
+    document.getElementById('detail-rating').textContent = `${album.rating} / 5.0`;
+    document.getElementById('detail-date').textContent = album.date || 'Не указана';
     
-    // Применяем текущую сортировку треков
-    if (currentTrackSort === 'rating') {
-        displayTracks.sort((a, b) => b.rating - a.rating);
-    } else if (currentTrackSort === 'plays') {
-        displayTracks.sort((a, b) => b.plays - a.plays);
+    const chartInfoEl = document.getElementById('detail-chart-info');
+    if (album.chartName) {
+        chartInfoEl.style.display = 'inline-block';
+        document.getElementById('detail-chart').textContent = `${album.chartName} #${album.chartPos || '?'}`;
+    } else {
+        chartInfoEl.style.display = 'none';
     }
-    // 'order' оставляет как есть
 
-    displayTracks.forEach((t, i) => {
-        tracksHtml += `
-            <li class="track-item-full">
-                <div>
-                    <span style="color:#777; margin-right:10px;">${i+1}.</span>
-                    <span>${escapeHtml(t.name)}</span>
-                </div>
-                <div style="display:flex; align-items:center;">
-                    <span style="color:#f1c40f; font-weight:bold;">${t.rating.toFixed(1)}</span>
-                    <span class="track-plays-count">▶ ${t.plays}</span>
-                </div>
-            </li>
-        `;
-    });
+    // Сброс сортировки на "По порядку"
+    document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('.sort-btn[data-sort="original"]').classList.add('active');
 
-    content.innerHTML = `
-        <div class="detail-header">
-            <h2>${escapeHtml(album.title)}</h2>
-            <div class="detail-meta">${escapeHtml(album.artist)}</div>
-            <div class="detail-meta">
-                Оценка: <span style="color:#f1c40f; font-weight:bold;">${parseFloat(album.rating).toFixed(1)}</span> | 
-                Дата: ${formatDate(album.date)}
-            </div>
-            ${album.chartName ? `<div class="detail-meta">🏆 ${escapeHtml(album.chartName)} #${album.chartPos}</div>` : ''}
-        </div>
-        
-        <div class="sort-tracks-bar">
-            <span style="font-size:0.8rem; color:#aaa; align-self:center; margin-right:5px;">Сорт. треков:</span>
-            <button onclick="setTrackSort('order')" class="${currentTrackSort==='order'?'active':''}">По порядку</button>
-            <button onclick="setTrackSort('rating')" class="${currentTrackSort==='rating'?'active':''}">По рейтингу</button>
-            <button onclick="setTrackSort('plays')" class="${currentTrackSort==='plays'?'active':''}">По прослуш.</button>
-        </div>
-
-        <ul class="track-list-full">
-            ${tracksHtml}
-        </ul>
-
-        <div style="margin-top: 20px; display:flex; gap:10px;">
-            <button class="edit-btn" style="flex:1" onclick="closeAlbumDetail(); editItem(${index})">Редактировать</button>
-            <button class="delete-btn" style="flex:1" onclick="closeAlbumDetail(); deleteItem(${index})">Удалить</button>
-        </div>
-    `;
-
+    renderDetailTracks('original');
     albumDetailModal.style.display = "block";
-};
+}
 
-window.setTrackSort = function(mode) {
-    currentTrackSort = mode;
-    const index = document.getElementById('album-detail-content').dataset.index;
-    openAlbumDetail(parseInt(index));
-};
+function renderDetailTracks(sortType) {
+    const container = document.getElementById('detail-tracks-list');
+    container.innerHTML = '';
+    
+    if (!currentAlbumForDetail || !currentAlbumForDetail.tracks) {
+        container.innerHTML = '<div style="text-align:center; color:#666;">Треков нет</div>';
+        return;
+    }
 
-window.closeAlbumDetail = function() {
-    albumDetailModal.style.display = "none";
-};
+    let tracks = [...currentAlbumForDetail.tracks];
+    
+    // Добавляем оригинальный индекс для сортировки "По порядку"
+    tracks = tracks.map((t, i) => ({...t, _origIdx: i}));
 
-// Глобальные функции для доступа из HTML
+    if (sortType === 'rating') {
+        tracks.sort((a, b) => parseFloat(b.rating) - parseFloat(a.rating));
+    } else if (sortType === 'plays') {
+        tracks.sort((a, b) => parseInt(b.plays) - parseInt(a.plays));
+    } else {
+        // original
+        tracks.sort((a, b) => a._origIdx - b._origIdx);
+    }
+
+    tracks.forEach((t, i) => {
+        const div = document.createElement('div');
+        div.className = 'detail-track-item';
+        div.innerHTML = `
+            <div class="detail-track-info">
+                <span class="track-name">${i+1}. ${escapeHtml(t.name)}</span>
+                <span class="track-stats">★ ${t.rating} • ▶ ${t.plays || 0}</span>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// Глобальные функции
 window.editItem = function(index) {
     openModal(currentTab, index);
 };
@@ -431,6 +531,5 @@ window.deleteItem = function(index) {
             musicData.singles.splice(index, 1);
         }
         saveMusicData();
-        if(albumDetailModal.style.display === 'block') closeAlbumDetail();
     }
 };
