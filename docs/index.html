@@ -11,7 +11,7 @@
         <h1>MuzWorm</h1>
         <form id="login-form">
             <input type="text" id="username" placeholder="Имя пользователя" required>
-            <button type="submit">Войти / Регистрация</button>
+            <button type="submit" class="primary-btn">Войти / Регистрация</button>
         </form>
     </div>
 
@@ -20,7 +20,7 @@
             <h1>MuzWorm</h1>
             <div id="user-info">
                 <span id="welcome-msg"></span>
-                <button id="logout-btn">Выйти</button>
+                <button id="logout-btn" class="small-btn">Выйти</button>
             </div>
         </header>
 
@@ -29,6 +29,18 @@
             <button class="tab-btn" data-tab="singles">Синглы</button>
         </nav>
 
+        <div class="controls-bar">
+            <label>Сортировка:</label>
+            <select id="sort-select">
+                <option value="date_desc">По дате (новые)</option>
+                <option value="date_asc">По дате (старые)</option>
+                <option value="rating_desc">По рейтингу (высокий)</option>
+                <option value="rating_asc">По рейтингу (низкий)</option>
+                <option value="alpha_asc">По названию (А-Я)</option>
+                <option value="alpha_desc">По названию (Я-А)</option>
+            </select>
+        </div>
+
         <main id="content-area">
             <!-- Контент загружается через JS -->
         </main>
@@ -36,28 +48,49 @@
 
     <!-- Модальное окно для Альбома -->
     <div id="album-modal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content modal-scrollable">
             <span class="close">&times;</span>
             <h2 id="album-modal-title">Добавить альбом</h2>
             <form id="album-form">
                 <input type="hidden" id="album-id">
-                <div class="form-group">
-                    <label>Исполнитель:</label>
-                    <input type="text" id="album-artist" required>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Исполнитель:</label>
+                        <input type="text" id="album-artist" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Название альбома:</label>
+                        <input type="text" id="album-title" required>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Название альбома:</label>
-                    <input type="text" id="album-title" required>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Оценка (0.0-5.0):</label>
+                        <input type="number" id="album-rating" step="0.1" min="0" max="5" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Дата оценки:</label>
+                        <input type="date" id="album-date" required>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Оценка альбома (1-10):</label>
-                    <input type="number" id="album-rating" min="1" max="10" required>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Название топа/чарта:</label>
+                        <input type="text" id="album-chart-name" placeholder="Например: Billboard 200">
+                    </div>
+                    <div class="form-group">
+                        <label>Место в топе:</label>
+                        <input type="number" id="album-chart-pos" placeholder="#">
+                    </div>
                 </div>
                 
                 <div class="form-group">
                     <label>Трек-лист:</label>
                     <div id="tracks-container"></div>
-                    <button type="button" id="add-track-btn" class="secondary-btn">+ Добавить трек</button>
+                    <button type="button" id="add-track-btn" class="secondary-btn small-btn">+ Добавить трек</button>
                 </div>
 
                 <button type="submit" class="primary-btn">Сохранить</button>
@@ -72,17 +105,25 @@
             <h2 id="single-modal-title">Добавить сингл</h2>
             <form id="single-form">
                 <input type="hidden" id="single-id">
-                <div class="form-group">
-                    <label>Исполнитель:</label>
-                    <input type="text" id="single-artist" required>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Исполнитель:</label>
+                        <input type="text" id="single-artist" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Название сингла:</label>
+                        <input type="text" id="single-title" required>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Название сингла:</label>
-                    <input type="text" id="single-title" required>
-                </div>
-                <div class="form-group">
-                    <label>Оценка (1-10):</label>
-                    <input type="number" id="single-rating" min="1" max="10" required>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Оценка (0.0-5.0):</label>
+                        <input type="number" id="single-rating" step="0.1" min="0" max="5" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Дата оценки:</label>
+                        <input type="date" id="single-date" required>
+                    </div>
                 </div>
                 <button type="submit" class="primary-btn">Сохранить</button>
             </form>
