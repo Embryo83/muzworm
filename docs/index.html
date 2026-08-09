@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Muzworm — demo accounts (client-only)</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Muzworm — локальные аккаунты (демо)</h1>
+    <p>Это статическая версия для GitHub Pages. Регистрация и хранилище профилей выполняются только в вашем браузере (localStorage). Пароли не передаются на сервер.</p>
+
+    <section id="auth">
+      <h2>Регистрация</h2>
+      <form id="registerForm">
+        <label>Электронная почта<br><input type="email" id="regEmail" required></label>
+        <label>Пароль<br><input type="password" id="regPassword" required></label>
+        <label>Отобразимое имя<br><input id="regDisplay" placeholder="Display name"></label>
+        <label>Короткая биография<br><textarea id="regBio"></textarea></label>
+        <button type="submit">Зарегистрироваться</button>
+      </form>
+
+      <h2>Вход</h2>
+      <form id="loginForm">
+        <label>Электронная почта<br><input type="email" id="loginEmail" required></label>
+        <label>Пароль<br><input type="password" id="loginPassword" required></label>
+        <button type="submit">Войти</button>
+      </form>
+
+      <div id="sessionArea" class="hidden">
+        <p>Выполнен вход как <span id="sessionEmail"></span></p>
+        <button id="logoutBtn">Выйти</button>
+      </div>
+    </section>
+
+    <section id="profileSection" class="hidden">
+      <h2>Мой профиль</h2>
+      <form id="profileForm">
+        <label>Отобразимое имя<br><input id="profileDisplay"></label>
+        <label>Биография<br><textarea id="profileBio"></textarea></label>
+        <label><input type="checkbox" id="profilePublic"> Сделать профиль публичным</label>
+        <button type="submit">Сохранить</button>
+      </form>
+      <button id="exportBtn">Экспортировать профиль (файл)</button>
+      <input type="file" id="importFile" accept="application/json">
+    </section>
+
+    <section>
+      <h2>Просмотр профиля</h2>
+      <p>Введите ID пользователя, чтобы посмотреть профиль (в демо локальные аккаунты видны только на том же браузере, если профиль приватный — показать нельзя).</p>
+      <label>ID пользователя (пусто — ваш профиль)<br><input id="viewUserId"></label>
+      <button id="viewBtn">Показать профиль</button>
+      <pre id="viewArea" class="card"></pre>
+    </section>
+
+    <section>
+      <h2>Замечание по безопасности</h2>
+      <ul>
+        <li>Это клиентская демо-реализация. Она подходит для локального тестирования и демонстраций.</li>
+        <li>Если вы хотите настоящую регистрацию, вход и приватность между устройствами — нужно развернуть бэкенд и БД (я могу помочь).</li>
+      </ul>
+    </section>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
