@@ -11,7 +11,7 @@
         <h1>MuzWorm</h1>
         <form id="login-form">
             <input type="text" id="username" placeholder="Имя пользователя" required>
-            <button type="submit">Войти / Регистрация</button>
+            <button type="submit" class="primary-btn">Войти / Регистрация</button>
         </form>
     </div>
 
@@ -20,7 +20,7 @@
             <h1>MuzWorm</h1>
             <div id="user-info">
                 <span id="welcome-msg"></span>
-                <button id="logout-btn">Выйти</button>
+                <button id="logout-btn" class="secondary-btn">Выйти</button>
             </div>
         </header>
 
@@ -29,24 +29,43 @@
             <button class="tab-btn" data-tab="singles">Синглы</button>
         </nav>
 
-        <div id="controls-area" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
-            <div class="sort-controls">
-                <label style="color:#aaa; font-size: 0.9rem;">Сортировка:</label>
-                <select id="global-sort" style="padding: 5px; background: #333; color: white; border: none; border-radius: 4px;">
-                    <option value="date-desc">Дата оценки (новые)</option>
-                    <option value="date-asc">Дата оценки (старые)</option>
-                    <option value="rating-desc">Рейтинг (высокий)</option>
-                    <option value="rating-asc">Рейтинг (низкий)</option>
-                </select>
-            </div>
-        </div>
+        <!-- Основной макет с тремя колонками -->
+        <div class="main-layout">
+            <!-- Левая колонка: ТОП Альбомов -->
+            <aside class="sidebar left-sidebar">
+                <div class="top-section">
+                    <h3>🏆 ТОП-10 Альбомов</h3>
+                    <div class="month-selector">
+                        <input type="month" id="album-top-month">
+                    </div>
+                    <div id="album-top-list" class="top-list">
+                        <!-- Заполняется JS -->
+                    </div>
+                </div>
+            </aside>
 
-        <main id="content-area">
-            <!-- Контент загружается через JS -->
-        </main>
+            <!-- Центральная колонка: Основной контент -->
+            <main id="content-area">
+                <!-- Заголовки и кнопки управления генерируются JS -->
+                <div id="cards-container"></div>
+            </main>
+
+            <!-- Правая колонка: ТОП Треков -->
+            <aside class="sidebar right-sidebar">
+                <div class="top-section">
+                    <h3>🔥 ТОП-20 Треков</h3>
+                    <div class="month-selector">
+                        <input type="month" id="track-top-month">
+                    </div>
+                    <div id="track-top-list" class="top-list">
+                        <!-- Заполняется JS -->
+                    </div>
+                </div>
+            </aside>
+        </div>
     </div>
 
-    <!-- Модальное окно для Альбома (Добавление/Редактирование) -->
+    <!-- Модальное окно: Добавление/Редактирование Альбома -->
     <div id="album-modal" class="modal">
         <div class="modal-content modal-scrollable">
             <span class="close">&times;</span>
@@ -65,8 +84,8 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Оценка (0.0-5.0):</label>
-                        <input type="number" id="album-rating" step="0.1" min="0" max="5" value="0.0" required>
+                        <label>Рейтинг (0.0 - 5.0):</label>
+                        <input type="number" id="album-rating" step="0.1" min="0" max="5" required>
                     </div>
                     <div class="form-group">
                         <label>Дата оценки:</label>
@@ -75,27 +94,27 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Топ:</label>
+                        <label>Название ТОПа (опционально):</label>
                         <input type="text" id="album-chart-name" placeholder="Например: Billboard 200">
                     </div>
                     <div class="form-group">
-                        <label>Место в топе:</label>
-                        <input type="number" id="album-chart-pos" placeholder="#">
+                        <label>Место в ТОПе:</label>
+                        <input type="number" id="album-chart-pos" min="1" placeholder="#">
                     </div>
                 </div>
-                
+
                 <div class="form-group">
                     <label>Трек-лист:</label>
                     <div id="tracks-container"></div>
-                    <button type="button" id="add-track-btn" class="secondary-btn">+ Добавить трек</button>
+                    <button type="button" id="add-track-btn" class="secondary-btn small">+ Добавить трек</button>
                 </div>
 
-                <button type="submit" class="primary-btn">Сохранить</button>
+                <button type="submit" class="primary-btn">Сохранить альбом</button>
             </form>
         </div>
     </div>
 
-    <!-- Модальное окно для Сингла (Добавление/Редактирование) -->
+    <!-- Модальное окно: Добавление/Редактирование Сингла -->
     <div id="single-modal" class="modal">
         <div class="modal-content">
             <span class="close">&times;</span>
@@ -112,24 +131,43 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Оценка (0.0-5.0):</label>
-                        <input type="number" id="single-rating" step="0.1" min="0" max="5" value="0.0" required>
+                        <label>Рейтинг (0.0 - 5.0):</label>
+                        <input type="number" id="single-rating" step="0.1" min="0" max="5" required>
                     </div>
                     <div class="form-group">
                         <label>Дата оценки:</label>
                         <input type="date" id="single-date" required>
                     </div>
                 </div>
-                <button type="submit" class="primary-btn">Сохранить</button>
+                <button type="submit" class="primary-btn">Сохранить сингл</button>
             </form>
         </div>
     </div>
 
-    <!-- Модальное окно Детального просмотра Альбома -->
+    <!-- Модальное окно: Детальный просмотр альбома -->
     <div id="album-detail-modal" class="modal">
-        <div class="modal-content modal-scrollable">
-            <span class="close" onclick="closeAlbumDetail()">&times;</span>
-            <div id="album-detail-content"></div>
+        <div class="modal-content modal-scrollable large-modal">
+            <span class="close">&times;</span>
+            <div id="album-detail-header">
+                <h2 id="detail-title">Название альбома</h2>
+                <p id="detail-artist" class="subtitle">Исполнитель</p>
+                <div class="detail-meta">
+                    <span class="badge rating-badge">⭐ <span id="detail-rating"></span></span>
+                    <span class="badge date-badge">📅 <span id="detail-date"></span></span>
+                    <span id="detail-chart-info" class="badge chart-badge" style="display:none">🏆 <span id="detail-chart"></span></span>
+                </div>
+            </div>
+            
+            <div class="track-sort-controls">
+                <span>Сортировка треков:</span>
+                <button class="sort-btn active" data-sort="original">По порядку</button>
+                <button class="sort-btn" data-sort="rating">По рейтингу</button>
+                <button class="sort-btn" data-sort="plays">По прослушиваниям</button>
+            </div>
+
+            <div id="detail-tracks-list" class="detailed-track-list">
+                <!-- Треки -->
+            </div>
         </div>
     </div>
 
